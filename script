@@ -1,0 +1,170 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local Window = Rayfield:CreateWindow({
+    Name = "herkles Untitled Tag Game Script",
+    LoadingTitle = "loading ",
+    LoadingSubtitle = "still loading"
+})
+
+local Tab = Window:CreateTab("main")
+
+local TagAuraState = false 
+local RoleBasedTagAuraState = false
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+
+local TagPlayer = ReplicatedStorage:WaitForChild("Events"):WaitForChild("game"):WaitForChild("tags"):WaitForChild("TagPlayer")
+
+
+local roles = {
+    Taggers = {"Tagger", "Slasher", "Peasant", "Freezer", "Chiller", "Alone", "Saint", "Bomb"},
+    Runners = {"Runner", "Survivor", "Crown", "Thawed"}
+}
+
+local function isRole(player, roleList)
+    local playerRole = player:FindFirstChild("PlayerRole")
+    return playerRole and table.find(roleList, playerRole.Value) ~= nil
+end
+
+local function shouldTag(targetPlayer)
+    local myRole = LocalPlayer:FindFirstChild("PlayerRole")
+    if not myRole then return false end
+
+    if isRole(LocalPlayer, roles.Taggers) and isRole(targetPlayer, roles.Runners) then
+        return true
+    elseif isRole(LocalPlayer, roles.Runners) and isRole(targetPlayer, roles.Taggers) then
+        return true
+    end
+
+    return false
+end
+
+local function getClosestPlayer()
+    local closestPlayer = nil
+    local shortestDistance = math.huge
+    local localCharacter = LocalPlayer.Character
+    local localRoot = localCharacter and localCharacter:FindFirstChild("HumanoidRootPart")
+
+    if not localRoot then return nil end
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Humanoid") then
+            local targetRoot = player.Character:FindFirstChild("HumanoidRootPart")
+            if targetRoot then
+                local distance = (localRoot.Position - targetRoot.Position).Magnitude
+                if distance < shortestDistance then
+                    closestPlayer = player
+                    shortestDistance = distance
+                end
+            end
+        end
+    end
+
+    return closestPlayer
+end
+
+local function getClosestValidPlayer()
+    local closestPlayer = nil
+    local shortestDistance = math.huge
+    local localCharacter = LocalPlayer.Character
+    local localRoot = localCharacter and localCharacter:FindFirstChild("HumanoidRootPart")
+
+    if not localRoot then return nil end
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            if shouldTag(player) then
+                local targetRoot = player.Character.HumanoidRootPart
+                local distance = (localRoot.Position - targetRoot.Position).Magnitude
+                if distance < shortestDistance then
+                    closestPlayer = player
+                    shortestDistance = distance
+                end
+            end
+        end
+    end
+
+    return closestPlayer
+end
+
+local function tagClosestPlayer()
+    local closestPlayer = getClosestPlayer()
+    if closestPlayer and closestPlayer.Character and closestPlayer.Character:FindFirstChild("Humanoid") then
+        local targetHumanoid = closestPlayer.Character.Humanoid
+        local localRoot = LocalPlayer.Character.HumanoidRootPart
+        local targetRoot = closestPlayer.Character.HumanoidRootPart
+
+        local directionVector = (targetRoot.Position - localRoot.Position).Unit
+
+        
+        local args = {
+            [1] = targetHumanoid,
+            [2] = directionVector
+        }
+
+        TagPlayer:InvokeServer(unpack(args))
+    end
+end
+
+local function tagClosestValidPlayer()
+    local closestPlayer = getClosestValidPlayer()
+    if closestPlayer and closestPlayer.Character and closestPlayer.Character:FindFirstChild("Humanoid") then
+        local targetHumanoid = closestPlayer.Character.Humanoid
+        local localRoot = LocalPlayer.Character.HumanoidRootPart
+        local targetRoot = closestPlayer.Character.HumanoidRootPart
+
+        local directionVector = (targetRoot.Position - localRoot.Position).Unit
+
+        local args = {
+            [1] = targetHumanoid,
+            [2] = directionVector
+        }
+
+        -- Invoke the remote
+        TagPlayer:InvokeServer(unpack(args))
+    end
+end
+
+
+local function manageTagAura()
+    while TagAuraState do
+        task.wait(0.001)
+        tagClosestPlayer()
+    end
+end
+
+
+local function manageRoleBasedTagAura()
+    while RoleBasedTagAuraState do
+        task.wait(0.001)
+        tagClosestValidPlayer()
+    end
+end
+
+-- Toggle for general tag aura
+Tab:CreateToggle({
+    Name = "FFA Tag Aura (hits everyone)",
+    CurrentValue = false,
+    Flag = "TagAuraToggle",
+    Callback = function(value)
+        TagAuraState = value
+        if TagAuraState then
+            task.spawn(manageTagAura)
+        end
+    end
+})
+
+
+Tab:CreateToggle({
+    Name = "Team Check Tag Aura (checks for opposing teams before hitting)",
+    CurrentValue = false,
+    Flag = "RoleTagAuraToggle",
+    Callback = function(value)
+        RoleBasedTagAuraState = value
+        if RoleBasedTagAuraState then
+            task.spawn(manageRoleBasedTagAura) 
+        end
+    end
+})
